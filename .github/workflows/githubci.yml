@@ -1,0 +1,198 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - master
+      - dev
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  set-matrix:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      version: ${{ steps.version.outputs.version }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v7
+
+      - name: Decide whether to publish
+        id: version
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          GDFU_BUILD_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          base="v$(tr -d '[:space:]' < VERSION)"
+          version=$(python3 scripts/build-version.py)
+          echo "Current VERSION: $base, build: $version"
+          publish=true
+          if [[ "$GDFU_BUILD_BRANCH" != dev && "$GDFU_BUILD_BRANCH" != master ]]; then
+            echo "Releases are published from dev and master only."
+            publish=false
+          elif [[ "$EVENT_NAME" == workflow_dispatch ]]; then
+            # Manual run: force the build and replace any existing release.
+            echo "Workflow dispatched manually: forcing build and release."
+          else
+            if [[ "$GDFU_BUILD_BRANCH" == dev && ! "$base" =~ -rc[0-9]+$ ]]; then
+              echo "::notice::$base is not a release candidate (-rc<N>); skipping prerelease."
+              publish=false
+            elif [[ "$GDFU_BUILD_BRANCH" == master && "$base" =~ -rc[0-9]+$ ]]; then
+              echo "::notice::$base is a release candidate; skipping release."
+              publish=false
+            else
+              # Read GitHub releases and remote tags, so a gh API failure cannot cause a duplicate.
+              tags=$({
+                gh release list --json tagName -L 200 --jq '.[].tagName' 2>/dev/null || true
+                git ls-remote --tags origin 2>/dev/null | sed -E 's#.*refs/tags/##; s/\^\{\}$//' || true
+              } | sort -u)
+              # dev: any tag equal to base or starting with "base-" (rc2 never matches rc20).
+              # master: exact tag only, so earlier RC tags do not block the final release.
+              existing=$(awk -v v="$base" -v dev="$([[ "$GDFU_BUILD_BRANCH" == dev ]] && echo 1 || true)" \
+                '$0 == v || (dev && index($0, v "-") == 1)' <<< "$tags")
+              if [[ -n "$existing" ]]; then
+                echo "::notice::$base is already released ($(echo $existing)); bump VERSION to publish."
+                publish=false
+              fi
+            fi
+          fi
+          if [[ "$publish" == true ]]; then
+            notes=()
+            [[ "$GDFU_BUILD_BRANCH" == dev ]] && notes=(--prerelease)
+            python3 scripts/release-notes.py "$version" "${notes[@]}" --notes-file /dev/null
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+
+      - name: Host tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Set matrix
+        id: set-matrix
+        working-directory: src/boards
+        run: |
+          MATRIX_JSON=$(grep -lxE '[[:space:]]*CFLAGS[[:space:]]*\+=[[:space:]]*-DGFSK_DFU_ENABLED=1[[:space:]]*' */board.mk | cut -d/ -f1 | sort | jq -R -s -c 'split("\n")[:-1]')
+          [[ "$MATRIX_JSON" != '[]' ]]
+          echo "matrix=$MATRIX_JSON"
+          echo "matrix=$MATRIX_JSON" >> $GITHUB_OUTPUT
+
+  build:
+    needs: set-matrix
+    if: github.event_name == 'pull_request' || needs.set-matrix.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: ${{ fromJSON(needs.set-matrix.outputs.matrix) }}
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+
+    - name: Install ARM GCC
+      uses: carlosperate/arm-none-eabi-gcc-action@v1
+      with:
+        release: '12.3.Rel1'
+
+    - name: Install Tools
+      run: |
+        pip3 install adafruit-nrfutil uritemplate requests intelhex setuptools
+
+    - name: Build
+      env:
+        BOARD: ${{ matrix.board }}
+        RELEASE_VERSION: ${{ needs.set-matrix.outputs.version }}
+      run: |
+        args=("BOARD=$BOARD" "GFSK_DFU_ENABLED=1")
+        if [[ -n "$RELEASE_VERSION" ]]; then
+          args+=("BUILD_VERSION=$RELEASE_VERSION")
+        fi
+        for profile in 1 2; do
+          make "${args[@]}" "GDFU_PROFILE=$profile" all
+          make "${args[@]}" "GDFU_PROFILE=$profile" copy-artifact
+        done
+
+    - uses: actions/upload-artifact@v7
+      with:
+        name: ${{ matrix.board }}
+        path: _bin/${{ matrix.board }}
+        if-no-files-found: error
+
+  release:
+    needs: [set-matrix, build]
+    # dev -> pre-release v<VERSION>-<sha>; master -> latest release v<VERSION>.
+    if: needs.set-matrix.outputs.publish == 'true'
+    concurrency: ${{ github.ref_name }}-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: v${{ needs.set-matrix.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v7
+
+    - name: Prepare release notes
+      id: notes
+      env:
+        RELEASE_VERSION: ${{ needs.set-matrix.outputs.version }}
+      run: |
+        python3 scripts/release-notes.py "$RELEASE_VERSION" ${{ github.ref == 'refs/heads/dev' && '--prerelease' || '' }} --github-output "$GITHUB_OUTPUT"
+
+    - name: Delete existing release
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+          echo "Release $RELEASE_TAG exists; deleting..."
+          gh release delete "$RELEASE_TAG" --yes
+        fi
+
+    - name: Create and push release tag
+      run: |
+        set -euo pipefail
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+          git tag -f "$RELEASE_TAG" HEAD
+          git push origin "refs/tags/$RELEASE_TAG" --force
+        elif git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+          echo "Tag $RELEASE_TAG already exists on remote; reusing it."
+        else
+          git tag "$RELEASE_TAG"
+          git push origin "refs/tags/$RELEASE_TAG"
+        fi
+
+    - name: Collect all board artifacts
+      uses: actions/download-artifact@v8
+      with:
+        path: _bin
+        merge-multiple: true
+
+    - name: List collected files
+      run: ls -lR _bin
+
+    - name: Publish release
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: ${{ env.RELEASE_TAG }}
+        body_path: release-notes.md
+        draft: false
+        prerelease: ${{ steps.notes.outputs.prerelease == 'true' }}
+        make_latest: ${{ steps.notes.outputs.prerelease == 'true' && 'false' || 'true' }}
+        fail_on_unmatched_files: true
+        files: |
+          _bin/*_bootloader-*.zip
+          _bin/*_bootloader-*.hex
+          _bin/update-*_bootloader-*.uf2

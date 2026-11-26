@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. Format inspired
 
 ## [Unreleased]
 
+### Changed
+
+- A target left in GFSK DFU with a valid application now reboots into it if no update starts within 10 minutes. After the first `START` it stays in the bootloader, so it never boots a partly written application.
+
 ### Fixed
 
 - SX1262 gFSK RX bandwidth is now 187.2 kHz as documented. It was 117.3 kHz, narrower than the 80 kbps / 28 kHz signal.

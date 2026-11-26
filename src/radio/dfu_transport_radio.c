@@ -5,6 +5,7 @@
 
 #include "app_error.h"
 #include "boards.h"
+#include "bootloader.h"
 #include "dfu.h"
 #include "dfu_init.h"
 #include "dfu_transport.h"
@@ -229,10 +230,23 @@ uint32_t dfu_transport_radio_update_start(void)
   uint8_t session_idle_ticks = 0;
   const uint8_t max_idle_ticks = GDFU_SESSION_TIMEOUT_MS / GDFU_DATA_ACK_TIMEOUT_MS;
 
+  // START is the point of no return: it erases the app slot. Before it, the
+  // slot is untouched, so an idle target can safely go back to the app.
+  uint32_t const entered_ms = board_millis();
+  bool upload_attempted = false;
+
   bool led_advertising = true; // main.c set STATE_GFSK_ADVERTISING before entry
   while (!m_done)
   {
     bool const advertising = (m_session.state == GDFU_STATE_ADVERTISING);
+    if (advertising && !upload_attempted &&
+        (board_millis() - entered_ms) >= GDFU_IDLE_TIMEOUT_MS &&
+        bootloader_app_is_valid())
+    {
+      gdfu_radio_sleep();
+      NRF_POWER->GPREGRET = DFU_MAGIC_SKIP;
+      NVIC_SystemReset();
+    }
     if (advertising != led_advertising)
     {
       // Beacon blink only while idling for a connection; otherwise stock LED.
@@ -279,6 +293,7 @@ uint32_t dfu_transport_radio_update_start(void)
 
     if (frame.type == GDFU_PKT_START)
     {
+      upload_attempted = true;
       // Retried START for the session we already opened (our ACK was lost):
       // re-ACK instead of reporting BUSY and killing a transfer that started.
       if (m_session.state == GDFU_STATE_RECEIVING && m_session.session_id != 0u &&

@@ -18,6 +18,8 @@ On reset the bootloader enters GFSK radio DFU when an update is requested — no
 
 While advertising, the target beacons every 5 s with its stable target ID (low 32 bits of the BLE MAC, FICR `DEVICEADDR[0]`; zero remapped to `0x01020304`). The ID survives reboots. After a timeout, validation failure, or `ABORT` the target clears volatile session state and returns to advertising; on `FINISH` success it activates the image and reboots into the application.
 
+If no `START` arrives within 10 minutes of entering GFSK DFU and the application is valid, the target writes `DFU_MAGIC_SKIP`, `0x6D`, to `GPREGRET` and reboots into the application. The first `START` addressed to the target disables this timeout until the next reset, since `START` erases the application slot. A target without a valid application keeps advertising.
+
 ## Radio ownership
 
 The bootloader owns the SX1262 over SPI (pins in each board's `board.h`, e.g. `src/boards/heltec_t114/board.h`). Default TX power is 10 dBm; a session-bound `SET_TX_POWER` (10–22 dBm) overrides it for one session, and every recovery reapplies the compiled 10 dBm default. Regulatory compliance for either frequency is the deployer's responsibility.

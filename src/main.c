@@ -110,7 +110,6 @@ extern void tusb_hal_nrf_power_event(uint32_t event);
 #define DFU_MAGIC_OTA_RESET             0xA8
 #define DFU_MAGIC_SERIAL_ONLY_RESET     0x4e
 #define DFU_MAGIC_UF2_RESET             0x57
-#define DFU_MAGIC_SKIP                  0x6d
 
 #define DFU_DBL_RESET_MAGIC             0x5A1AD5      // SALADS
 #define DFU_DBL_RESET_APP               0x4ee5677e

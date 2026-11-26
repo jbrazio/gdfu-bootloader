@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Release versions use `YYYY.M.K` (candidates `YYYY.M.K-rcN`) and are maintained manually in `VERSION`.
 
+## [Unreleased]
+
+### Fixed
+
+- SX1262 gFSK RX bandwidth is now 187.2 kHz as documented. It was 117.3 kHz, narrower than the 80 kbps / 28 kHz signal.
+
 ## [2026.11.1]
 
 ### Added

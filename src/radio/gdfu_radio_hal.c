@@ -230,7 +230,7 @@ int gdfu_radio_init(void)
     SX1262_SET_MODULATION_PARAMS,
     (uint8_t)(br >> 16), (uint8_t)(br >> 8), (uint8_t)br,
     0x09,
-    0x0B,  /* rxBw = 187.2 kHz (both profiles) */
+    0x12,  /* rxBw = 187.2 kHz DSB (Semtech SX126X_GFSK_BW_187200), both profiles */
     (uint8_t)(fdev >> 16), (uint8_t)(fdev >> 8), (uint8_t)fdev,
   };
   if (cmd_write(mod, sizeof(mod)) != 0) return -1;

@@ -56,7 +56,7 @@ DFU writes the application starting at that address (`0x00026000` on T114). A GD
 ## Failure and recovery
 
 - **Single bank.** The new image overwrites the running one. An interrupted or failed update, or power loss mid-transfer, leaves a partial or erased application. No rollback exists.
-- **Target.** Without a valid application the bootloader re-enters GDFU advertising. Timeout, validation failure or abort clears volatile session state and returns to advertising. Recover by starting a fresh update from offset zero.
+- **Target.** Without a valid application the bootloader re-enters GDFU advertising. Timeout, validation failure or abort clears volatile session state and returns to advertising. Recover by starting a fresh update from offset zero. With a valid application and no `START` for 10 minutes, the target reboots into the application. After any `START` it stays in the bootloader.
 - **Proxy.** `ABORT` cancels an active transfer and returns the proxy to idle. A START chain (five total transmissions, including the initial one) in progress makes the proxy answer busy until it ends. If the proxy stops receiving target ACKs while beacons still arrive, power-cycle the proxy.
 - **Stale target session.** A fresh `START` clears a stale target session. If the target is unresponsive, re-enter GFSK DFU on it before judging the link dead.
 

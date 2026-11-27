@@ -26,6 +26,9 @@
 #include "bootloader_types.h"
 #include <dfu_types.h>
 
+/** GPREGRET magic: boot straight into the application, skipping DFU and the double-reset delay. */
+#define DFU_MAGIC_SKIP 0x6d
+
 /**@brief Function for initializing the Bootloader.
  * 
  * @retval     NRF_SUCCESS If bootloader was succesfully initialized. 

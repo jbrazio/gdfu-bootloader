@@ -12,7 +12,7 @@ class RadioSourceTests(unittest.TestCase):
         self.assertIn("for (size_t i = 0; i < len; ++i) tx_buf[2 + i] = buf[i];", source)
         self.assertIn("cmd_write(tx_buf, len + 2)", source)
         # Both profiles use 187.2 kHz.
-        self.assertIn("0x0B,  /* rxBw = 187.2 kHz (both profiles) */", source)
+        self.assertIn("0x12,  /* rxBw = 187.2 kHz DSB", source)
 
     def test_target_applies_session_bound_tx_power_only(self) -> None:
         """Target must authenticate and validate power control before changing RF power."""

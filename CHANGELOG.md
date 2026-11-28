@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Release versions use `YYYY.M.K` (candidates `YYYY.M.K-rcN`) and are maintained manually in `VERSION`.
 
-## [Unreleased]
+## [2026.11.2] - 2026-11-28
 
 ### Changed
 

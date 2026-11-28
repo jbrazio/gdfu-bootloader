@@ -8,7 +8,8 @@ The changelog is for people flashing and running the bootloader, not a git log: 
 
 ## Git
 
-- Never commit directly to `master`. Work on a branch.
-- Commits go mainly to `dev`.
-- Workflow: direct commit or branch merge → `dev` → PR → `master`.
+- `master` is protected: never commit or push to it directly.
+- Do all new work in a git worktree on a new branch created from `dev`.
+- Commits reach `dev` only through a PR from that branch. Never commit or push directly to `dev`.
+- Workflow: worktree branch → PR → `dev` → PR → `master`.
 - Open a PR to `master` only when the user asks for one.

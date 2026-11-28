@@ -15,6 +15,11 @@
 #define GDFU_MIN_TX_POWER_DBM 10u
 #define GDFU_MAX_TX_POWER_DBM 22u
 
+// With no START received in this window, a target with a valid app reboots into it.
+#ifndef GDFU_IDLE_TIMEOUT_MS
+#define GDFU_IDLE_TIMEOUT_MS 600000u
+#endif
+
 #define GDFU_PROFILE_ID_433 1u
 #define GDFU_PROFILE_ID_868 2u
 
